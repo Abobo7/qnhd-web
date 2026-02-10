@@ -135,6 +135,7 @@
           v-for="floor in floors"
           :key="floor.id"
           :floor="floor"
+          :hide-avatar="isSchoolPost"
           @reply="openReply(floor)"
           @like="toggleFloorLike(floor)"
           @preview="previewImage"
@@ -248,6 +249,7 @@ const deleting = ref(false)
 const commentScrollHandler = ref(null)
 const officialReplies = ref([])
 const loadingOfficial = ref(false)
+const isSchoolPost = computed(() => post.value?.type === 1)
 
 const postId = computed(() => {
   const val = Number(route.params.id)
@@ -453,7 +455,7 @@ async function sendComment() {
     commentImages.value = []
     toast?.('发送成功！', 'success')
     await loadFloors(true)
-    if (post.value) post.value.comment_count++
+    if (post.value) post.value.comment_count = (post.value.comment_count || 0) + 1
   } catch (e) {
     toast?.(e.message || '发送失败', 'error')
   } finally {
@@ -541,9 +543,23 @@ function formatTime(dateStr) {
   return `${y}-${m}-${day} ${h}:${min}`
 }
 
+const HTML_ESCAPE_MAP = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+  '`': '&#96;',
+}
+
+function escapeHtml(text) {
+  return text.replace(/[&<>"'`]/g, (ch) => HTML_ESCAPE_MAP[ch] || ch)
+}
+
 function renderContent(text) {
   if (!text) return ''
-  return text.replace(/\n/g, '<br/>')
+  // Escape user text to prevent XSS, then restore line breaks
+  return escapeHtml(text).replace(/\n/g, '<br/>')
 }
 
 function previewImage(url) {

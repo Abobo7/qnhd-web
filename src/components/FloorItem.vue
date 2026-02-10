@@ -71,7 +71,10 @@
 import { ref } from 'vue'
 import { imageOriginUrl, avatarUrl, getAvatarColor } from '../utils/image'
 
-defineProps({ floor: { type: Object, required: true } })
+const props = defineProps({
+  floor: { type: Object, required: true },
+  hideAvatar: { type: Boolean, default: false },
+})
 defineEmits(['reply', 'like', 'preview'])
 
 const showAllSub = ref(false)
@@ -79,6 +82,8 @@ const imgErr = ref(false)
 
 function getAvatarStr(floor) {
   if (!floor) return ''
+  // For校务帖等需隐藏头像的场景，强制使用字母头像
+  if (props.hideAvatar) return ''
   // Floor object usually has avatar at top level
   if (floor.avatar && floor.avatar !== '') return floor.avatar
   if (floor.user_info?.avatar) return floor.user_info.avatar
@@ -103,9 +108,23 @@ function formatTime(dateStr) {
   return d.toLocaleDateString('zh-CN')
 }
 
+const HTML_ESCAPE_MAP = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+  '`': '&#96;',
+}
+
+function escapeHtml(text) {
+  return text.replace(/[&<>"'`]/g, (ch) => HTML_ESCAPE_MAP[ch] || ch)
+}
+
 function renderContent(text) {
   if (!text) return ''
-  return text.replace(/\n/g, '<br/>')
+  // Escape user text to prevent XSS, then restore line breaks
+  return escapeHtml(text).replace(/\n/g, '<br/>')
 }
 </script>
 

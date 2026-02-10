@@ -33,7 +33,11 @@
 <script setup>
 import { inject } from 'vue'
 
-const { theme, toggleTheme } = inject('theme')
+// Provide safe defaults if no provider is registered to avoid setup errors
+const { theme = 'light', toggleTheme = () => {} } = inject('theme', {
+  theme: 'light',
+  toggleTheme: () => {},
+})
 </script>
 
 <style scoped>
