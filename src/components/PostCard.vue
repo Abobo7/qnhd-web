@@ -1,19 +1,37 @@
 <template>
-  <article class="post-card card" @click="$emit('click')">
+  <article class="post-card" @click="$emit('click')">
+    <!-- Header: avatar + name + level + time ... post ID -->
     <div class="post-card-header">
       <div class="post-card-author">
-        <div class="avatar-sm">{{ (post.nickname || '匿')[0] }}</div>
-        <span class="author-name">{{ post.nickname || '匿名用户' }}</span>
-        <span class="dot">·</span>
-        <span class="post-time">{{ formatTime(post.created_at) }}</span>
+        <img
+          v-if="getAvatarStr(post) && !imgErr"
+          :src="avatarUrl(getAvatarStr(post))"
+          class="avatar-circle avatar-img"
+          @error="imgErr = true"
+        />
+        <div v-else class="avatar-circle" :style="{ background: getAvatarColor(post.uid || 0) }">{{ getLetterAvatar(post.nickname) }}</div>
+        <div class="author-detail">
+          <div class="author-top-row">
+            <span class="author-name">{{ post.nickname || '匿名用户' }}</span>
+            <span v-if="post.user_info?.level" class="badge-level">LV{{ post.user_info.level }}</span>
+          </div>
+          <span class="post-time">{{ formatDateTime(post.created_at) }}</span>
+        </div>
       </div>
-      <span v-if="post.tag" class="badge">{{ post.tag.name }}</span>
+      <span class="post-id">#MP{{ post.id }}</span>
     </div>
 
-    <h3 class="post-card-title">{{ post.title }}</h3>
+    <!-- Title with optional pinned badge -->
+    <div class="post-card-title-row">
+      <span v-if="isPinned(post)" class="badge-pin">置顶</span>
+      <span v-if="post.tag" class="badge tag-badge">{{ post.tag.name }}</span>
+      <h3 class="post-card-title">{{ post.title }}</h3>
+    </div>
+
+    <!-- Content -->
     <p class="post-card-content">{{ truncateContent(post.content) }}</p>
 
-    <!-- Thumbnail images -->
+    <!-- Images -->
     <div v-if="post.image_urls?.length" class="post-card-images">
       <img
         v-for="(url, i) in post.image_urls.slice(0, 3)"
@@ -22,119 +40,177 @@
         class="thumb-image"
         loading="lazy"
       />
-      <div v-if="post.image_urls.length > 3" class="thumb-more">
-        +{{ post.image_urls.length - 3 }}
-      </div>
     </div>
 
+    <!-- Footer stats -->
     <div class="post-card-footer">
-      <span class="stat">
-        <span class="icon">thumb_up_off_alt</span>
-        {{ post.like_count || 0 }}
-      </span>
-      <span class="stat">
-        <span class="icon">chat_bubble_outline</span>
-        {{ post.comment_count || 0 }}
-      </span>
-      <span class="stat">
-        <span class="icon">visibility</span>
-        {{ post.visit_count || 0 }}
-      </span>
+      <div class="stats-left">
+        <span class="stat">
+          <span class="icon">chat_bubble_outline</span>
+          {{ post.comment_count || 0 }}
+        </span>
+        <span class="stat">
+          <span class="icon">thumb_up_off_alt</span>
+          {{ post.like_count || 0 }}
+        </span>
+        <span class="stat">
+          <span class="icon">thumb_down_off_alt</span>
+          {{ post.dis_count || 0 }}
+        </span>
+      </div>
+      <span class="stat visit-stat">{{ post.visit_count || 0 }}次浏览</span>
     </div>
+
+    <!-- Divider -->
+    <div class="card-divider"></div>
   </article>
 </template>
 
 <script setup>
-import { imageThumbUrl } from '../utils/image'
+import { ref } from 'vue'
+import { imageThumbUrl, avatarUrl, getAvatarColor } from '../utils/image'
 
 defineProps({ post: { type: Object, required: true } })
 defineEmits(['click'])
 
-function formatTime(dateStr) {
+const imgErr = ref(false)
+
+function getAvatarStr(post) {
+  if (!post || post.type === 1) return ''
+  const ui = post.user_info
+  if (ui && ui.avatar && ui.avatar !== '') return ui.avatar
+  if (post.avatar && post.avatar !== '') return post.avatar
+  return ''
+}
+
+function getLetterAvatar(nickname) {
+  const name = nickname || '匿'
+  const cleaned = name.replace(/[\d\*\s]/g, '').replace(/[^\u4e00-\u9fa5]/g, '')
+  return cleaned ? cleaned[0] : name[0]
+}
+
+function formatDateTime(dateStr) {
   if (!dateStr) return ''
   const d = new Date(dateStr)
-  const now = new Date()
-  const diff = (now - d) / 1000
-  if (diff < 60) return '刚刚'
-  if (diff < 3600) return Math.floor(diff / 60) + '分钟前'
-  if (diff < 86400) return Math.floor(diff / 3600) + '小时前'
-  if (diff < 604800) return Math.floor(diff / 86400) + '天前'
-  return d.toLocaleDateString('zh-CN')
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  const h = String(d.getHours()).padStart(2, '0')
+  const min = String(d.getMinutes()).padStart(2, '0')
+  const sec = String(d.getSeconds()).padStart(2, '0')
+  return `${y}-${m}-${day} ${h}:${min}:${sec}`
 }
 
 function truncateContent(text) {
   if (!text) return ''
-  return text.length > 120 ? text.slice(0, 120) + '...' : text
+  return text.length > 150 ? text.slice(0, 150) + '...' : text
+}
+
+function isPinned(post) {
+  // Backend typically uses e_tag === 'top' or is_top flag
+  if (!post) return false
+  if (post.is_top) return true
+  return post.e_tag === 'top' || post.eTag === 'top'
 }
 </script>
 
 <style scoped>
 .post-card {
   cursor: pointer;
-  transition: all var(--transition-normal);
+  padding: 16px 4px;
+  transition: background var(--transition-fast);
 }
 .post-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md), var(--shadow-glow);
-  border-color: rgba(108, 92, 231, 0.2);
+  background: var(--bg-hover);
+  border-radius: var(--radius-md);
 }
 
+/* Header */
 .post-card-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   margin-bottom: 10px;
 }
 .post-card-author {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: var(--text-sm);
-  color: var(--text-secondary);
+  gap: 10px;
 }
-.avatar-sm {
-  width: 28px;
-  height: 28px;
+.avatar-circle {
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
-  background: var(--accent-gradient);
+  background: linear-gradient(135deg, #90CAF9, #42A5F5);
   display: flex;
   align-items: center;
   justify-content: center;
   color: white;
-  font-size: var(--text-xs);
+  font-size: 14px;
   font-weight: 600;
   flex-shrink: 0;
 }
-.author-name { font-weight: 500; }
-.dot { color: var(--text-tertiary); }
-.post-time { color: var(--text-tertiary); font-size: var(--text-xs); }
-
-.post-card-title {
+.avatar-img {
+  object-fit: cover;
+}
+.author-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.author-top-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.author-name {
   font-size: var(--text-base);
   font-weight: 600;
-  margin-bottom: 6px;
-  line-height: 1.4;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  color: var(--text-primary);
+}
+.post-time {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+.post-id {
+  font-size: var(--text-xs);
+  color: var(--text-hint);
+  font-weight: 500;
 }
 
+/* Title */
+.post-card-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+.post-card-title {
+  font-size: var(--text-md);
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+.tag-badge {
+  font-size: 11px;
+  padding: 1px 6px;
+}
+
+/* Content */
 .post-card-content {
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   color: var(--text-secondary);
   line-height: 1.6;
-  margin-bottom: 12px;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  margin-bottom: 10px;
+  word-break: break-word;
 }
 
+/* Images */
 .post-card-images {
   display: flex;
   gap: 8px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 .thumb-image {
   width: 80px;
@@ -142,20 +218,15 @@ function truncateContent(text) {
   border-radius: var(--radius-sm);
   object-fit: cover;
 }
-.thumb-more {
-  width: 80px;
-  height: 80px;
-  border-radius: var(--radius-sm);
-  background: var(--bg-input);
+
+/* Footer */
+.post-card-footer {
   display: flex;
   align-items: center;
-  justify-content: center;
-  color: var(--text-tertiary);
-  font-size: var(--text-sm);
-  font-weight: 600;
+  justify-content: space-between;
+  margin-bottom: 12px;
 }
-
-.post-card-footer {
+.stats-left {
   display: flex;
   gap: 16px;
 }
@@ -167,9 +238,19 @@ function truncateContent(text) {
   color: var(--text-tertiary);
 }
 .stat .icon { font-size: 16px; }
+.visit-stat {
+  font-size: var(--text-xs);
+  color: var(--text-hint);
+}
+
+/* Divider */
+.card-divider {
+  height: 1px;
+  background: var(--divider);
+}
 
 @media (max-width: 768px) {
-  .thumb-image, .thumb-more {
+  .thumb-image {
     width: 64px;
     height: 64px;
   }

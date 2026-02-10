@@ -1,85 +1,78 @@
 <template>
   <div class="login-page">
-    <div class="login-bg"></div>
-    <div class="login-container">
-      <div class="login-card card-glass">
-        <div class="login-header">
-          <div class="login-logo">
-            <span class="icon" style="font-size: 40px; color: var(--accent-primary);">forum</span>
-          </div>
-          <h1 class="login-title">青年湖底</h1>
-          <p class="login-subtitle">天津大学校园论坛</p>
+    <div class="login-card">
+      <div class="login-header">
+        <span class="icon login-logo" style="font-size:40px;color:var(--primary);">forum</span>
+        <h1 class="login-title">青年湖底</h1>
+        <p class="login-subtitle">天津大学校园论坛</p>
+      </div>
+
+      <div class="login-form">
+        <div class="form-group">
+          <label class="form-label">学号 / 用户名</label>
+          <input
+            v-model="username"
+            class="form-input"
+            placeholder="请输入学号"
+            @keydown.enter="$refs.pwdInput?.focus()"
+          />
         </div>
 
-        <form @submit.prevent="handleLogin" class="login-form">
-          <div class="form-group">
-            <label class="form-label">学号 / 用户名</label>
+        <div class="form-group">
+          <label class="form-label">密码</label>
+          <div class="password-wrapper">
             <input
-              v-model="username"
-              type="text"
-              class="input"
-              placeholder="请输入学号或用户名"
-              autocomplete="username"
-              required
+              ref="pwdInput"
+              v-model="password"
+              :type="showPwd ? 'text' : 'password'"
+              class="form-input"
+              placeholder="请输入密码"
+              @keydown.enter="login"
             />
+            <button class="pwd-toggle" @click="showPwd = !showPwd">
+              <span class="icon">{{ showPwd ? 'visibility' : 'visibility_off' }}</span>
+            </button>
           </div>
-          <div class="form-group">
-            <label class="form-label">密码</label>
-            <div class="password-wrapper">
-              <input
-                v-model="password"
-                :type="showPassword ? 'text' : 'password'"
-                class="input"
-                placeholder="请输入密码"
-                autocomplete="current-password"
-                required
-              />
-              <button type="button" class="password-toggle" @click="showPassword = !showPassword">
-                <span class="icon">{{ showPassword ? 'visibility_off' : 'visibility' }}</span>
-              </button>
-            </div>
-          </div>
+        </div>
 
-          <button type="submit" class="btn btn-primary login-btn" :disabled="loading">
-            <span v-if="loading" class="spinner" style="width:18px;height:18px;border-width:2px;"></span>
-            <span v-else>登 录</span>
-          </button>
+        <button
+          class="btn btn-primary login-btn"
+          :disabled="!username || !password || loading"
+          @click="login"
+        >
+          <div v-if="loading" class="spinner" style="width:18px;height:18px;border-width:2px;border-color:rgba(255,255,255,0.3);border-top-color:white;"></div>
+          <span v-else>登录</span>
+        </button>
 
-          <p v-if="errorMsg" class="login-error">{{ errorMsg }}</p>
-        </form>
+        <p v-if="error" class="error-text">{{ error }}</p>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, inject } from 'vue'
+import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 
 const router = useRouter()
 const authStore = useAuthStore()
-const toast = inject('toast')
 
 const username = ref('')
 const password = ref('')
-const showPassword = ref(false)
+const showPwd = ref(false)
 const loading = ref(false)
-const errorMsg = ref('')
+const error = ref('')
 
-async function handleLogin() {
-  if (!username.value || !password.value) {
-    errorMsg.value = '请输入用户名和密码'
-    return
-  }
+async function login() {
+  if (!username.value || !password.value || loading.value) return
   loading.value = true
-  errorMsg.value = ''
+  error.value = ''
   try {
     await authStore.login(username.value, password.value)
-    toast?.('登录成功！', 'success')
-    router.push('/')
+    router.replace('/')
   } catch (e) {
-    errorMsg.value = e.message || '登录失败，请检查用户名和密码'
+    error.value = e.message || '登录失败，请检查用户名和密码'
   } finally {
     loading.value = false
   }
@@ -92,53 +85,32 @@ async function handleLogin() {
   display: flex;
   align-items: center;
   justify-content: center;
-  position: relative;
-  overflow: hidden;
-}
-
-.login-bg {
-  position: fixed;
-  inset: 0;
-  background:
-    radial-gradient(ellipse at 20% 50%, rgba(108, 92, 231, 0.15) 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 20%, rgba(0, 206, 201, 0.1) 0%, transparent 50%),
-    radial-gradient(ellipse at 50% 80%, rgba(162, 155, 254, 0.08) 0%, transparent 50%),
-    var(--bg-primary);
-  z-index: -1;
-}
-
-.login-container {
-  width: 100%;
-  max-width: 420px;
+  background: var(--bg-page);
   padding: 20px;
 }
 
 .login-card {
+  width: 100%;
+  max-width: 380px;
+  background: var(--bg-card);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
   padding: 40px 32px;
 }
 
 .login-header {
   text-align: center;
-  margin-bottom: 36px;
+  margin-bottom: 32px;
 }
-
-.login-logo {
-  margin-bottom: 16px;
-}
-
 .login-title {
   font-size: var(--text-2xl);
   font-weight: 700;
-  background: var(--accent-gradient);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  margin-bottom: 4px;
+  color: var(--primary);
+  margin: 8px 0 4px;
 }
-
 .login-subtitle {
-  color: var(--text-secondary);
   font-size: var(--text-sm);
+  color: var(--text-tertiary);
 }
 
 .login-form {
@@ -152,47 +124,41 @@ async function handleLogin() {
   flex-direction: column;
   gap: 6px;
 }
-
 .form-label {
   font-size: var(--text-sm);
-  color: var(--text-secondary);
   font-weight: 500;
+  color: var(--text-secondary);
 }
 
 .password-wrapper {
   position: relative;
 }
-
-.password-wrapper .input {
-  padding-right: 44px;
+.password-wrapper .form-input {
+  padding-right: 40px;
 }
-
-.password-toggle {
+.pwd-toggle {
   position: absolute;
   right: 8px;
   top: 50%;
   transform: translateY(-50%);
-  padding: 4px;
-  color: var(--text-tertiary);
-  cursor: pointer;
   background: none;
   border: none;
-}
-.password-toggle:hover {
-  color: var(--text-secondary);
+  color: var(--text-hint);
+  cursor: pointer;
 }
 
 .login-btn {
   width: 100%;
-  padding: 14px;
-  font-size: var(--text-base);
+  padding: 12px;
+  font-size: var(--text-md);
   font-weight: 600;
-  margin-top: 8px;
+  border-radius: var(--radius-md);
+  margin-top: 4px;
 }
 
-.login-error {
-  text-align: center;
-  color: var(--accent-danger);
+.error-text {
+  color: #E53935;
   font-size: var(--text-sm);
+  text-align: center;
 }
 </style>

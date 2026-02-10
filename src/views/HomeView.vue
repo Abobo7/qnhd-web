@@ -1,96 +1,74 @@
 <template>
-  <div class="home-page page-container">
-    <div class="home-layout">
-      <!-- Main content -->
-      <main class="home-main">
-        <!-- Search bar -->
-        <div class="search-bar card-glass">
-          <span class="icon search-icon">search</span>
-          <input
-            v-model="searchKeyword"
-            class="search-input"
-            placeholder="搜索帖子..."
-            @keydown.enter="doSearch"
-          />
-          <button v-if="searchKeyword" class="btn-icon" @click="clearSearch">
-            <span class="icon">close</span>
-          </button>
-        </div>
-
-        <!-- Tab bar -->
-        <div class="tab-bar">
-          <button
-            v-for="tab in tabs"
-            :key="tab.id"
-            :class="['tab-item', { active: activeTab === tab.id }]"
-            @click="switchTab(tab.id)"
-          >
-            {{ tab.shortname || tab.name }}
-          </button>
-        </div>
-
-        <!-- Post list -->
-        <div class="post-list">
-          <PostCard
-            v-for="post in posts"
-            :key="post.id"
-            :post="post"
-            @click="goToPost(post.id)"
-          />
-
-          <!-- Loading skeleton -->
-          <template v-if="loading">
-            <div v-for="i in 3" :key="'sk'+i" class="card post-skeleton">
-              <div class="skeleton" style="width: 60%; height: 20px; margin-bottom: 12px;"></div>
-              <div class="skeleton" style="width: 100%; height: 14px; margin-bottom: 8px;"></div>
-              <div class="skeleton" style="width: 80%; height: 14px;"></div>
-            </div>
-          </template>
-
-          <!-- Load more -->
-          <div v-if="!loading && hasMore" class="load-more">
-            <div class="spinner"></div>
-          </div>
-
-          <!-- Empty state -->
-          <div v-if="!loading && posts.length === 0" class="empty-state">
-            <span class="icon" style="font-size: 48px; color: var(--text-tertiary);">inbox</span>
-            <p>暂无帖子</p>
-          </div>
-        </div>
-      </main>
-
-      <!-- Sidebar (desktop only) -->
-      <aside class="home-sidebar">
-        <!-- Hot tags -->
-        <div class="sidebar-section card">
-          <h3 class="sidebar-title">
-            <span class="icon">local_fire_department</span>
-            热门标签
-          </h3>
-          <div class="tag-list">
-            <button
-              v-for="tag in hotTags"
-              :key="tag.id"
-              class="badge tag-badge"
-              @click="searchByTag(tag)"
-            >
-              # {{ tag.name }}
-            </button>
-          </div>
-        </div>
-
-        <!-- Quick create -->
-        <router-link to="/create" class="btn btn-primary create-btn">
-          <span class="icon">edit</span>
-          发布新帖
-        </router-link>
-      </aside>
+  <div class="home-page">
+    <!-- Search bar -->
+    <div class="search-bar">
+      <span class="icon search-icon">search</span>
+      <input
+        v-model="searchKeyword"
+        class="search-input"
+        placeholder="#搜索帖子"
+        @keydown.enter="doSearch"
+      />
+      <button v-if="searchKeyword" class="btn-icon" @click="clearSearch">
+        <span class="icon" style="font-size:18px;">close</span>
+      </button>
     </div>
 
-    <!-- FAB (mobile) -->
+    <!-- Tab bar -->
+    <div class="tab-bar-wrapper">
+      <div class="tab-bar">
+        <button
+          v-for="tab in tabs"
+          :key="tab.id"
+          :class="['tab-item', { active: activeTab === tab.id }]"
+          @click="switchTab(tab.id)"
+        >
+          {{ tab.shortname || tab.name }}
+        </button>
+      </div>
+    </div>
+
+    <!-- Sort row -->
+    <div class="sort-row">
+      <button
+        :class="['sort-btn', { active: sortMode === 1 }]"
+        @click="changeSortMode(1)"
+      >默认排序</button>
+      <button
+        :class="['sort-btn', { active: sortMode === 0 }]"
+        @click="changeSortMode(0)"
+      >最新发帖</button>
+    </div>
+
+    <!-- Post list -->
+    <div class="post-list">
+      <PostCard
+        v-for="post in posts"
+        :key="post.id"
+        :post="post"
+        @click="goToPost(post.id)"
+      />
+
+      <!-- Loading -->
+      <div v-if="loading" class="load-indicator">
+        <div class="spinner"></div>
+      </div>
+
+      <!-- Load more indicator -->
+      <div v-if="!loading && hasMore" class="load-indicator">
+        <div class="spinner" style="width:20px;height:20px;border-width:2px;"></div>
+      </div>
+
+      <!-- Empty -->
+      <div v-if="!loading && posts.length === 0" class="empty-state">
+        <span class="icon" style="font-size:48px;">inbox</span>
+        <p>暂无帖子</p>
+      </div>
+    </div>
+
+    <!-- FAB -->
     <router-link to="/create" class="fab">
-      <span class="icon">add</span>
+      <span class="icon" style="font-size:28px;">add</span>
     </router-link>
   </div>
 </template>
@@ -107,12 +85,13 @@ const forumStore = useForumStore()
 
 const tabs = ref([])
 const activeTab = ref(2)
+const FEATURED_TAB = { id: 0, name: '精华', shortname: '精华' }
 const posts = ref([])
 const loading = ref(false)
 const page = ref(1)
 const hasMore = ref(true)
 const searchKeyword = ref('')
-const hotTags = ref([])
+const sortMode = ref(1) // Default to 1 (Default sort)
 const PAGE_SIZE = 10
 
 function onScroll() {
@@ -127,16 +106,20 @@ function onScroll() {
 
 onMounted(async () => {
   await forumStore.fetchPostTypes()
-  tabs.value = forumStore.postTypes
-  if (tabs.value.length && !tabs.value.find(t => t.id === activeTab.value)) {
-    activeTab.value = tabs.value[0].id
-  }
-  await forumStore.fetchHotTags()
-  hotTags.value = forumStore.hotTags
+  buildTabs()
   await loadPosts()
-  // Add scroll listener AFTER first load to prevent premature trigger
   window.addEventListener('scroll', onScroll, { passive: true })
 })
+
+function buildTabs() {
+  const types = [...forumStore.postTypes]
+  const hasFeatured = types.some(t => t.id === FEATURED_TAB.id)
+  const finalTabs = hasFeatured ? types : [FEATURED_TAB, ...types]
+  tabs.value = finalTabs
+  if (finalTabs.length && !finalTabs.find(t => t.id === activeTab.value)) {
+    activeTab.value = FEATURED_TAB.id
+  }
+}
 
 onUnmounted(() => {
   window.removeEventListener('scroll', onScroll)
@@ -151,15 +134,16 @@ async function loadPosts(reset = false) {
   }
   loading.value = true
   try {
+    const isFeatured = activeTab.value === FEATURED_TAB.id
     const res = await postsApi.getPosts({
       type: activeTab.value,
       page: page.value,
-      keyword: searchKeyword.value || undefined,
-      searchMode: searchKeyword.value ? 1 : undefined
+      keyword: isFeatured ? '' : (searchKeyword.value || undefined),
+      searchMode: isFeatured ? 1 : (searchKeyword.value ? 1 : sortMode.value),
+      eTag: isFeatured ? 'recommend' : undefined,
     })
     const newPosts = res.data?.list || []
     posts.value.push(...newPosts)
-    // API total is per-page — use list length to determine if more pages exist
     hasMore.value = newPosts.length >= PAGE_SIZE
   } catch (e) {
     console.error('加载帖子失败', e)
@@ -175,6 +159,15 @@ function loadMore() {
 
 function switchTab(tabId) {
   activeTab.value = tabId
+  if (tabId === FEATURED_TAB.id) {
+    searchKeyword.value = ''
+    sortMode.value = 1
+  }
+  loadPosts(true)
+}
+
+function changeSortMode(mode) {
+  sortMode.value = mode
   loadPosts(true)
 }
 
@@ -187,38 +180,30 @@ function clearSearch() {
   loadPosts(true)
 }
 
-function searchByTag(tag) {
-  searchKeyword.value = tag.name
-  loadPosts(true)
-}
-
 function goToPost(id) {
   router.push(`/post/${id}`)
 }
 </script>
 
 <style scoped>
-.home-layout {
-  display: grid;
-  grid-template-columns: 1fr 280px;
-  gap: 24px;
-  align-items: start;
-}
-
-.home-main {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+.home-page {
+  max-width: var(--content-max-width);
+  margin: 0 auto;
+  padding: 0 var(--space-lg);
+  padding-bottom: calc(var(--bottom-nav-height) + 20px);
 }
 
 /* Search */
 .search-bar {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
+  gap: 10px;
+  padding: 10px 14px;
+  margin: var(--space-lg) 0 var(--space-md);
+  background: var(--bg-input);
+  border-radius: var(--radius-full);
 }
-.search-icon { color: var(--text-tertiary); }
+.search-icon { color: var(--text-hint); font-size: 20px; }
 .search-input {
   flex: 1;
   font-size: var(--text-base);
@@ -226,127 +211,107 @@ function goToPost(id) {
   border: none;
   color: var(--text-primary);
 }
-.search-input::placeholder { color: var(--text-tertiary); }
+.search-input::placeholder { color: var(--text-hint); }
 
 /* Tabs */
-.tab-bar {
-  display: flex;
-  gap: 4px;
+.tab-bar-wrapper {
+  margin-bottom: var(--space-md);
   overflow-x: auto;
   scrollbar-width: none;
   -ms-overflow-style: none;
-  padding-bottom: 4px;
+  scroll-snap-type: x mandatory;
 }
-.tab-bar::-webkit-scrollbar { display: none; }
-.tab-item {
-  padding: 8px 16px;
-  border-radius: var(--radius-full);
-  font-size: var(--text-sm);
-  font-weight: 500;
-  color: var(--text-secondary);
+.tab-bar-wrapper::-webkit-scrollbar { display: none; }
+.tab-bar {
+  display: flex;
+  gap: 4px;
   white-space: nowrap;
-  transition: all var(--transition-fast);
+  min-width: 100%;
+  scroll-snap-type: x mandatory;
+}
+.tab-item {
+  position: relative;
+  padding: 10px 16px;
+  font-size: var(--text-lg);
+  font-weight: 400;
+  color: var(--text-secondary);
   background: none;
   border: none;
   cursor: pointer;
+  transition: all var(--transition-fast);
+  scroll-snap-align: start;
 }
-.tab-item:hover { color: var(--text-primary); background: var(--bg-input); }
+.tab-item:hover { color: var(--text-primary); }
 .tab-item.active {
-  color: white;
-  background: var(--accent-gradient);
-  box-shadow: var(--shadow-glow);
+  color: var(--primary);
+  font-weight: 700;
+  font-size: var(--text-xl);
+}
+.tab-item.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 20px;
+  height: 3px;
+  background: var(--primary);
+  border-radius: 2px;
+}
+
+/* Sort */
+.sort-row {
+  display: flex;
+  gap: 16px;
+  margin-bottom: var(--space-md);
+  padding-left: 4px;
+}
+.sort-btn {
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-weight: 400;
+}
+.sort-btn.active {
+  color: var(--primary);
+  font-weight: 600;
 }
 
 /* Post list */
 .post-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
 }
-.post-skeleton { min-height: 100px; }
 
-/* Load more */
-.load-more {
+/* Load indicator */
+.load-indicator {
   display: flex;
   justify-content: center;
   padding: 24px 0;
 }
 
-/* Empty */
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 60px 0;
-  color: var(--text-tertiary);
-}
-
-/* Sidebar */
-.home-sidebar {
-  position: sticky;
-  top: calc(var(--header-height) + 24px);
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-.sidebar-section { padding: 20px; }
-.sidebar-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--text-secondary);
-  margin-bottom: 16px;
-}
-.sidebar-title .icon { font-size: 18px; color: var(--accent-danger); }
-.tag-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.tag-badge {
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  border: none;
-}
-.tag-badge:hover {
-  background: rgba(108, 92, 231, 0.25);
-  transform: translateY(-1px);
-}
-
-.create-btn {
-  width: 100%;
-  padding: 14px;
-  font-size: var(--text-base);
-}
-
 /* FAB */
 .fab {
-  display: none;
   position: fixed;
-  bottom: 24px;
+  bottom: calc(var(--bottom-nav-height) + 20px);
   right: 24px;
-  width: 56px;
-  height: 56px;
+  width: 52px;
+  height: 52px;
   border-radius: 50%;
-  background: var(--accent-gradient);
+  background: var(--primary);
   color: white;
+  display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: var(--shadow-lg), var(--shadow-glow);
+  box-shadow: var(--shadow-fab);
   z-index: 100;
   transition: transform var(--transition-fast);
 }
-.fab:hover { transform: scale(1.1); }
-.fab .icon { font-size: 28px; }
+.fab:hover { transform: scale(1.08); }
 
-@media (max-width: 900px) {
-  .home-layout {
-    grid-template-columns: 1fr;
-  }
-  .home-sidebar { display: none; }
-  .fab { display: flex; }
+@media (max-width: 768px) {
+  .home-page { padding: 0 var(--space-md); }
 }
 </style>

@@ -1,191 +1,269 @@
 <template>
   <div class="profile-page page-container">
-    <div class="content-container">
-      <!-- User info -->
-      <div class="profile-card card-glass">
-        <div class="profile-header">
-          <div class="profile-avatar">{{ (userInfo?.nickname || '?')[0] }}</div>
-          <div class="profile-info">
-            <h2 class="profile-name">{{ userInfo?.nickname || '加载中...' }}</h2>
-            <span class="profile-level badge">Lv.{{ userInfo?.level_info?.level || 0 }} {{ userInfo?.level_info?.level_name || '' }}</span>
-          </div>
-          <button class="btn btn-secondary" @click="handleLogout">退出登录</button>
-        </div>
-      </div>
-
-      <!-- Tabs -->
-      <div class="profile-tabs">
-        <button
-          v-for="tab in profileTabs"
-          :key="tab.key"
-          :class="['tab-item', { active: activeTab === tab.key }]"
-          @click="switchTab(tab.key)"
-        >
-          <span class="icon">{{ tab.icon }}</span>
-          {{ tab.label }}
-        </button>
-      </div>
-
-      <!-- Post list -->
-      <div class="post-list">
-        <PostCard
-          v-for="post in posts"
-          :key="post.id"
-          :post="post"
-          @click="$router.push(`/post/${post.id}`)"
+    <!-- User info card -->
+    <div class="user-card card">
+      <div class="user-info-row">
+        <img
+          v-if="userAvatar && !userAvatarError"
+          :src="userAvatar"
+          class="avatar-lg avatar-img"
+          @error="userAvatarError = true"
         />
-
-        <div v-if="loading" class="load-more"><div class="spinner"></div></div>
-
-        <button v-if="!loading && hasMore" class="btn btn-secondary" style="width:100%;" @click="loadMore">
-          加载更多
-        </button>
-
-        <div v-if="!loading && posts.length === 0" class="empty-state" style="padding:60px 0;">
-          <span class="icon" style="font-size:48px;color:var(--text-tertiary);">
-            {{ activeTab === 'my' ? 'article' : activeTab === 'fav' ? 'bookmark' : 'history' }}
-          </span>
-          <p style="color:var(--text-tertiary);">暂无内容</p>
+        <div v-else class="avatar-lg" :style="{ background: userAvatarBg }">{{ userAvatarLetter }}</div>
+        <div class="user-detail">
+          <h2 class="username">{{ userInfo?.nickname || '用户' }}</h2>
+          <div v-if="userInfo?.level_info" class="level-info">
+            <span class="badge-level" style="font-size:11px;padding:2px 6px;">
+              LV{{ userInfo.level_info.level }}
+            </span>
+            <span class="level-name">{{ userInfo.level_info.level_name }}</span>
+          </div>
         </div>
+      </div>
+
+      <!-- Level progress -->
+      <div v-if="userInfo?.level_info" class="progress-bar">
+        <div
+          class="progress-fill"
+          :style="{ width: levelPercent + '%' }"
+        ></div>
+      </div>
+      <p v-if="userInfo?.level_info" class="progress-text">
+        {{ userInfo.level_point || 0 }} / {{ userInfo.level_info.next_level_point || 100 }} 经验
+      </p>
+    </div>
+
+    <!-- Tabs -->
+    <div class="profile-tabs">
+      <button
+        :class="['tab-btn', { active: activeTab === 'posts' }]"
+        @click="activeTab = 'posts'; loadTabData()"
+      >我的帖子</button>
+      <button
+        :class="['tab-btn', { active: activeTab === 'favs' }]"
+        @click="activeTab = 'favs'; loadTabData()"
+      >收藏</button>
+      <button
+        :class="['tab-btn', { active: activeTab === 'history' }]"
+        @click="activeTab = 'history'; loadTabData()"
+      >浏览历史</button>
+    </div>
+
+    <!-- Tab content -->
+    <div class="tab-content">
+      <PostCard
+        v-for="post in tabPosts"
+        :key="post.id"
+        :post="post"
+        @click="$router.push('/post/' + post.id)"
+      />
+
+      <div v-if="tabLoading" class="load-indicator"><div class="spinner"></div></div>
+
+      <div v-if="!tabLoading && tabPosts.length === 0" class="empty-state">
+        <span class="icon" style="font-size:40px;">folder_open</span>
+        <p>暂无内容</p>
       </div>
     </div>
+
+    <!-- Logout button -->
+    <button class="btn logout-btn" @click="logout">
+      <span class="icon">logout</span>
+      退出登录
+    </button>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, inject } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { postsApi } from '../api/posts'
+import { avatarUrl, getAvatarColor } from '../utils/image'
 import PostCard from '../components/PostCard.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
-const toast = inject('toast')
 
-const userInfo = ref(null)
-const activeTab = ref('my')
-const posts = ref([])
-const loading = ref(false)
-const page = ref(1)
-const hasMore = ref(true)
+const activeTab = ref('posts')
+const tabPosts = ref([])
+const tabLoading = ref(false)
 
-const profileTabs = [
-  { key: 'my', label: '我的帖子', icon: 'article' },
-  { key: 'fav', label: '我的收藏', icon: 'bookmark' },
-  { key: 'history', label: '浏览历史', icon: 'history' },
-]
+const userInfo = computed(() => authStore.userInfo)
 
-onMounted(async () => {
-  await authStore.fetchUserInfo()
-  userInfo.value = authStore.userInfo
-  await loadPosts(true)
+const levelPercent = computed(() => {
+  const info = userInfo.value?.level_info
+  if (!info) return 0
+  const cur = userInfo.value.level_point - (info.cur_level_point || 0)
+  const range = (info.next_level_point || 100) - (info.cur_level_point || 0)
+  return range > 0 ? Math.min((cur / range) * 100, 100) : 0
 })
 
-async function loadPosts(reset = false) {
-  if (loading.value) return
-  if (reset) { page.value = 1; posts.value = []; hasMore.value = true; }
-  loading.value = true
+const userAvatarError = ref(false)
+
+const userAvatar = computed(() => {
+  if (userAvatarError.value) return ''
+  const av = userInfo.value?.avatar
+  if (!av || av === '') return ''
+  return avatarUrl(av)
+})
+
+const userAvatarBg = computed(() => getAvatarColor(userInfo.value?.uid || 0))
+
+const userAvatarLetter = computed(() => {
+  const name = userInfo.value?.nickname || '我'
+  const cleaned = name.replace(/[\d\*\s]/g, '').replace(/[^\u4e00-\u9fa5]/g, '')
+  return cleaned ? cleaned[0] : name[0]
+})
+
+onMounted(() => {
+  if (!authStore.userInfo) {
+    authStore.fetchUserInfo()
+  }
+  loadTabData()
+})
+
+async function loadTabData() {
+  tabPosts.value = []
+  tabLoading.value = true
   try {
     let res
-    if (activeTab.value === 'my') {
-      res = await postsApi.getMyPosts(page.value)
-    } else if (activeTab.value === 'fav') {
-      res = await postsApi.getFavoritePosts(page.value)
+    if (activeTab.value === 'posts') {
+      res = await postsApi.getMyPosts({ page: 1 })
+    } else if (activeTab.value === 'favs') {
+      res = await postsApi.getFavoritePosts(1)
     } else {
-      res = await postsApi.getHistoryPosts(page.value)
+      res = await postsApi.getHistoryPosts(1)
     }
-    const list = res.data?.list || []
-    posts.value.push(...list)
-    hasMore.value = list.length >= 10
+    tabPosts.value = res.data?.list || []
   } catch (e) {
-    toast?.('加载失败', 'error')
+    console.error('加载失败', e)
   } finally {
-    loading.value = false
+    tabLoading.value = false
   }
 }
 
-function switchTab(key) {
-  activeTab.value = key
-  loadPosts(true)
-}
-
-function loadMore() {
-  page.value++
-  loadPosts()
-}
-
-function handleLogout() {
+function logout() {
   authStore.logout()
-  router.push('/login')
+  router.replace('/login')
 }
 </script>
 
 <style scoped>
-.profile-card { padding: 24px; margin-bottom: 20px; }
-.profile-header {
+/* User card */
+.user-card {
+  padding: 24px;
+  margin-bottom: 20px;
+}
+.user-info-row {
   display: flex;
   align-items: center;
   gap: 16px;
+  margin-bottom: 16px;
 }
-.profile-avatar {
+.avatar-lg {
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  background: var(--accent-gradient);
+  background: linear-gradient(135deg, #90CAF9, #42A5F5);
   display: flex;
   align-items: center;
   justify-content: center;
   color: white;
-  font-size: var(--text-xl);
-  font-weight: 700;
+  font-size: 22px;
+  font-weight: 600;
+  font-weight: 600;
   flex-shrink: 0;
 }
-.profile-info { flex: 1; }
-.profile-name {
-  font-size: var(--text-lg);
-  font-weight: 700;
-  margin-bottom: 4px;
+.avatar-img {
+  object-fit: cover;
 }
-.profile-level {
-  font-size: var(--text-xs);
-}
-
-.profile-tabs {
+.user-detail {
   display: flex;
+  flex-direction: column;
   gap: 4px;
-  margin-bottom: 16px;
 }
-.tab-item {
+.username {
+  font-size: var(--text-xl);
+  font-weight: 700;
+}
+.level-info {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 10px 18px;
-  border-radius: var(--radius-full);
-  font-size: var(--text-sm);
-  font-weight: 500;
-  color: var(--text-secondary);
+}
+.level-name {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+/* Progress bar */
+.progress-bar {
+  height: 6px;
+  background: var(--bg-input);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary-light), var(--primary));
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+.progress-text {
+  font-size: var(--text-xs);
+  color: var(--text-hint);
+  text-align: right;
+}
+
+/* Profile tabs */
+.profile-tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--divider);
+}
+.tab-btn {
+  padding: 10px 20px;
+  font-size: var(--text-base);
+  color: var(--text-tertiary);
   background: none;
   border: none;
+  border-bottom: 2px solid transparent;
   cursor: pointer;
+  font-weight: 500;
   transition: all var(--transition-fast);
 }
-.tab-item:hover { color: var(--text-primary); background: var(--bg-input); }
-.tab-item.active {
-  color: white;
-  background: var(--accent-gradient);
-  box-shadow: var(--shadow-glow);
+.tab-btn:hover { color: var(--text-primary); }
+.tab-btn.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
 }
-.tab-item .icon { font-size: 18px; }
 
-.post-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+/* Tab content */
+.tab-content {
+  margin-bottom: 24px;
 }
-.load-more {
+
+.load-indicator {
   display: flex;
   justify-content: center;
-  padding: 20px 0;
+  padding: 24px 0;
+}
+
+/* Logout */
+.logout-btn {
+  width: 100%;
+  padding: 12px;
+  color: #E53935;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  font-size: var(--text-base);
+}
+.logout-btn:hover {
+  background: rgba(229, 57, 53, 0.05);
+  border-color: #E53935;
 }
 </style>

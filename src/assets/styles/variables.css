@@ -1,92 +1,80 @@
-/* ===== CSS Variables / Design Tokens ===== */
+/* ========================================
+   Design system matching Flutter app
+   ======================================== */
+
 :root {
-  /* Colors - Dark theme by default */
-  --bg-primary: #0f0f13;
-  --bg-secondary: #1a1a24;
-  --bg-card: #1e1e2e;
-  --bg-card-hover: #252538;
-  --bg-input: #25253a;
-  --bg-overlay: rgba(0, 0, 0, 0.6);
+  /* Primary blue (matches Flutter app) */
+  --primary: #2979FF;
+  --primary-light: #448AFF;
+  --primary-dark: #2962FF;
+  --primary-bg: rgba(41, 121, 255, 0.08);
 
-  --text-primary: #e8e8f0;
-  --text-secondary: #9a9ab0;
-  --text-tertiary: #6a6a80;
-  --text-inverse: #0f0f13;
+  /* Orange accent (greeting & highlights) */
+  --accent-orange: #F57C00;
+  --accent-orange-light: #FFB74D;
 
-  --accent-primary: #6c5ce7;
-  --accent-primary-hover: #7c6df7;
-  --accent-gradient: linear-gradient(135deg, #6c5ce7, #a29bfe);
-  --accent-secondary: #00cec9;
-  --accent-danger: #ff6b6b;
-  --accent-warning: #feca57;
-  --accent-success: #55efc4;
+  /* Red for pinned/top badges */
+  --badge-red: #E53935;
+  --badge-red-bg: rgba(229, 57, 53, 0.1);
 
-  --border-color: rgba(255, 255, 255, 0.06);
-  --border-color-hover: rgba(255, 255, 255, 0.12);
+  /* Level badge */
+  --level-bg: #F57C00;
+  --level-color: #fff;
 
-  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
-  --shadow-glow: 0 0 20px rgba(108, 92, 231, 0.15);
+  /* Text colors */
+  --text-primary: #1a1a1a;
+  --text-secondary: #666;
+  --text-tertiary: #999;
+  --text-hint: #bbb;
 
-  /* Glass effect */
-  --glass-bg: rgba(30, 30, 46, 0.7);
-  --glass-border: rgba(255, 255, 255, 0.08);
-  --glass-blur: blur(20px);
+  /* Backgrounds */
+  --bg-page: #F5F6FA;
+  --bg-card: #FFFFFF;
+  --bg-input: #F0F2F5;
+  --bg-hover: #F5F6FA;
+  --bg-header: #FFFFFF;
+
+  /* Borders */
+  --border-color: #E8E8E8;
+  --border-light: #F0F0F0;
+  --divider: #EEEEEE;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --shadow-card: 0 1px 4px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.1);
+  --shadow-fab: 0 4px 12px rgba(41, 121, 255, 0.35);
 
   /* Typography */
-  --font-sans: 'Inter', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
-
-  --text-xs: 0.75rem;
-  --text-sm: 0.875rem;
-  --text-base: 1rem;
-  --text-lg: 1.125rem;
-  --text-xl: 1.25rem;
-  --text-2xl: 1.5rem;
-  --text-3xl: 2rem;
+  --font-family: 'Inter', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-md: 15px;
+  --text-lg: 17px;
+  --text-xl: 20px;
+  --text-2xl: 24px;
 
   /* Spacing */
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 24px;
-  --radius-full: 9999px;
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+
+  /* Radius */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --radius-full: 100px;
 
   /* Layout */
-  --header-height: 64px;
-  --sidebar-width: 280px;
   --content-max-width: 720px;
-  --page-max-width: 1200px;
+  --header-height: 52px;
+  --bottom-nav-height: 56px;
 
   /* Transitions */
   --transition-fast: 0.15s ease;
   --transition-normal: 0.25s ease;
-  --transition-slow: 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* Light theme */
-[data-theme="light"] {
-  --bg-primary: #f5f5fa;
-  --bg-secondary: #ffffff;
-  --bg-card: #ffffff;
-  --bg-card-hover: #f0f0f8;
-  --bg-input: #f0f0f8;
-  --bg-overlay: rgba(0, 0, 0, 0.3);
-
-  --text-primary: #1a1a2e;
-  --text-secondary: #5a5a7a;
-  --text-tertiary: #9a9ab0;
-  --text-inverse: #ffffff;
-
-  --border-color: rgba(0, 0, 0, 0.06);
-  --border-color-hover: rgba(0, 0, 0, 0.12);
-
-  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.06);
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.08);
-  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.12);
-  --shadow-glow: 0 0 20px rgba(108, 92, 231, 0.08);
-
-  --glass-bg: rgba(255, 255, 255, 0.7);
-  --glass-border: rgba(0, 0, 0, 0.06);
 }

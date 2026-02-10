@@ -29,20 +29,26 @@ export const floorsApi = {
 
     sendFloor(postId, content, images = []) {
         const formData = new FormData()
-        formData.append('post_id', postId)
+        formData.append('post_id', Number(postId))
         formData.append('content', content)
+        // Backend expects an images field even if empty; append empty entry when none
         if (images.length) {
-            images.forEach(url => formData.append('image_urls', url))
+            images.forEach(url => formData.append('images', url))
+        } else {
+            formData.append('images', '')
         }
         return api.post('floor', formData)
     },
 
     replyFloor(floorId, content, images = []) {
         const formData = new FormData()
-        formData.append('floor_id', floorId)
+        formData.append('reply_to_floor', Number(floorId))
         formData.append('content', content)
         if (images.length) {
-            images.forEach(url => formData.append('image_urls', url))
+            images.forEach(url => formData.append('images', url))
+        } else {
+            // Backend expects images field even if empty
+            formData.append('images', '')
         }
         return api.post('floor/reply', formData)
     },

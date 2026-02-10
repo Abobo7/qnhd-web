@@ -1,6 +1,11 @@
 import { api } from './axios'
 
 export const postsApi = {
+    createPost(payload) {
+        // Backward compat for callers expecting createPost
+        return postsApi.sendPost(payload)
+    },
+
     getPosts({ type = 2, page = 1, keyword, tagId, departmentId, searchMode, eTag } = {}) {
         return api.get('posts', {
             params: {
@@ -26,45 +31,84 @@ export const postsApi = {
         return api.post('post/visit', formData)
     },
 
+    likeComment(floorId, isLike) {
+        const formData = new FormData()
+        formData.append('floor_id', String(floorId))
+        formData.append('op', isLike ? '0' : '1')
+        return api.post('floor/like', formData, {
+            headers: { 'Content-Type': undefined }
+        })
+    },
+
     likePost(postId, isLike) {
         const formData = new FormData()
-        formData.append('post_id', postId)
-        formData.append('op', isLike ? 0 : 1)
-        return api.post('post/like', formData)
+        formData.append('post_id', String(postId))
+        formData.append('op', isLike ? '0' : '1')
+        return api.post('post/like', formData, {
+            headers: { 'Content-Type': undefined }
+        })
     },
 
     dislikePost(postId, isDisliked) {
         const formData = new FormData()
-        formData.append('post_id', postId)
-        formData.append('op', isDisliked ? 0 : 1)
-        return api.post('post/dis', formData)
+        formData.append('post_id', String(postId))
+        formData.append('op', isDisliked ? '0' : '1')
+        return api.post('post/dis', formData, {
+            headers: { 'Content-Type': undefined }
+        })
+    },
+
+    dislikeComment(floorId, isDisliked) {
+        const formData = new FormData()
+        formData.append('floor_id', String(floorId))
+        formData.append('op', isDisliked ? '0' : '1')
+        return api.post('floor/dis', formData, {
+            headers: { 'Content-Type': undefined }
+        })
     },
 
     favoritePost(postId, isFav) {
         const formData = new FormData()
-        formData.append('post_id', postId)
-        formData.append('op', isFav ? 0 : 1)
-        return api.post('post/fav', formData)
+        formData.append('post_id', String(postId))
+        formData.append('op', isFav ? '0' : '1')
+        return api.post('post/fav', formData, {
+            headers: { 'Content-Type': undefined }
+        })
     },
 
-    sendPost({ type, title, content, departmentId, tagId, campus, images }) {
+    sendPost({ type, title, content, departmentId, tagId, tag, campus, images, masked }) {
         const formData = new FormData()
         formData.append('type', type)
         formData.append('title', title)
         formData.append('content', content)
-        if (departmentId) formData.append('department_id', departmentId)
-        if (tagId) formData.append('tag_id', tagId)
-        formData.append('campus', campus || 0)
+        formData.append('department_id', departmentId ?? '')
+        const resolvedTag = tagId ?? tag
+        formData.append('tag_id', resolvedTag ?? '')
+        formData.append('campus', campus ?? 0)
+        formData.append('masked', Array.isArray(masked) ? masked.join(',') : (masked ?? ''))
         if (images?.length) {
-            images.forEach(url => formData.append('image_urls', url))
+            // Backend expects the filename (as returned by upload), not full URL
+            images.map(extractImageName).forEach(name => formData.append('images', name))
         }
-        return api.post('post', formData)
+        return api.post('post', formData, {
+            headers: { 'Content-Type': undefined }
+        })
     },
 
     deletePost(id) {
-        const formData = new FormData()
-        formData.append('id', id)
-        return api.post('post/delete', formData)
+        return api.get('post/delete', {
+            params: {
+                post_id: id
+            }
+        })
+    },
+
+    deleteComment(floorId) {
+        return api.get('floor/delete', {
+            params: {
+                floor_id: floorId
+            }
+        })
     },
 
     getPostTypes() {
@@ -92,14 +136,46 @@ export const postsApi = {
     },
 
     getMyPosts(page = 1, pageSize = 10) {
-        return api.get('posts/user', { params: { page, page_size: pageSize } })
+        const { pageNum, size } = normalizePageParams(page, pageSize)
+        return api.get('posts/user', { params: { page: pageNum, page_size: size } })
     },
 
     getFavoritePosts(page = 1, pageSize = 10) {
-        return api.get('posts/fav', { params: { page, page_size: pageSize } })
+        const { pageNum, size } = normalizePageParams(page, pageSize)
+        return api.get('posts/fav', { params: { page: pageNum, page_size: size } })
     },
 
     getHistoryPosts(page = 1, pageSize = 10) {
-        return api.get('posts/history', { params: { page, page_size: pageSize } })
+        const { pageNum, size } = normalizePageParams(page, pageSize)
+        return api.get('posts/history', { params: { page: pageNum, page_size: size } })
     },
+}
+
+function normalizePageParams(page, pageSize) {
+    if (page && typeof page === 'object') {
+        return {
+            pageNum: page.page || 1,
+            size: page.pageSize || page.page_size || 10,
+        }
+    }
+    return {
+        pageNum: page || 1,
+        size: pageSize || 10,
+    }
+}
+
+function extractImageName(url) {
+    if (!url) return ''
+    // If already a bare filename
+    if (!url.includes('/')) return url
+    try {
+        // Handle full URL
+        const u = new URL(url, 'http://placeholder/')
+        const name = u.pathname.split('/').filter(Boolean).pop() || ''
+        return name
+    } catch (e) {
+        // Fallback for relative paths like /qnhdpic/download/origin/xxx.png
+        const parts = url.split('/')
+        return parts.filter(Boolean).pop() || url
+    }
 }

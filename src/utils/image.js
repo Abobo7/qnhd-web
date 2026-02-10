@@ -66,3 +66,29 @@ export function imageThumbUrls(filenames) {
     if (!Array.isArray(filenames)) return []
     return filenames.map(imageThumbUrl)
 }
+
+/**
+ * Build an avatar image URL.
+ * Flutter: https://qnhdpic.twt.edu.cn/download/origin/{avatar}
+ */
+export function avatarUrl(avatar) {
+    if (!avatar) return ''
+    if (avatar.startsWith('http')) return proxyFullUrl(avatar)
+    return PIC_PROXY_BASE + 'origin/' + avatar
+}
+
+/**
+ * Level colors matching Flutter's levelColors palette.
+ * Used when no avatar image is available.
+ */
+const AVATAR_COLORS = [
+    '#42A5F5', '#66BB6A', '#FFA726', '#AB47BC',
+    '#26C6DA', '#EC407A', '#8D6E63', '#78909C',
+    '#5C6BC0', '#D4E157'
+]
+
+export function getAvatarColor(uid) {
+    if (!uid) return AVATAR_COLORS[0]
+    return AVATAR_COLORS[uid % AVATAR_COLORS.length]
+}
+
