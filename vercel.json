@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "https://qnhd.twt.edu.cn/api/$1" },
+    { "source": "/qnhdpic/(.*)", "destination": "https://qnhdpic.twt.edu.cn/$1" },
+    { "source": "/pic-api/(.*)", "destination": "https://qnhdpic.twt.edu.cn/$1" },
+    { "source": "/(.*)", "destination": "/" }
+  ]
+}
