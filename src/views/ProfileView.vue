@@ -37,15 +37,15 @@
     <div class="profile-tabs">
       <button
         :class="['tab-btn', { active: activeTab === 'posts' }]"
-        @click="activeTab = 'posts'; loadTabData()"
+        @click="switchTab('posts')"
       >我的帖子</button>
       <button
         :class="['tab-btn', { active: activeTab === 'favs' }]"
-        @click="activeTab = 'favs'; loadTabData()"
+        @click="switchTab('favs')"
       >收藏</button>
       <button
         :class="['tab-btn', { active: activeTab === 'history' }]"
-        @click="activeTab = 'history'; loadTabData()"
+        @click="switchTab('history')"
       >浏览历史</button>
     </div>
 
@@ -59,6 +59,10 @@
       />
 
       <div v-if="tabLoading" class="load-indicator"><div class="spinner"></div></div>
+
+      <div v-if="!tabLoading && hasMore && tabPosts.length > 0" class="load-indicator">
+        <div class="spinner" style="width:20px;height:20px;border-width:2px;"></div>
+      </div>
 
       <div v-if="!tabLoading && tabPosts.length === 0" class="empty-state">
         <span class="icon" style="font-size:40px;">folder_open</span>
@@ -75,7 +79,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { postsApi } from '../api/posts'
@@ -88,6 +92,9 @@ const authStore = useAuthStore()
 const activeTab = ref('posts')
 const tabPosts = ref([])
 const tabLoading = ref(false)
+const page = ref(1)
+const hasMore = ref(true)
+const PAGE_SIZE = 10
 
 const userInfo = computed(() => authStore.userInfo)
 
@@ -120,27 +127,65 @@ onMounted(() => {
   if (!authStore.userInfo) {
     authStore.fetchUserInfo()
   }
-  loadTabData()
+  loadTabData(true)
+  window.addEventListener('scroll', onScroll, { passive: true })
 })
 
-async function loadTabData() {
-  tabPosts.value = []
+onUnmounted(() => {
+  window.removeEventListener('scroll', onScroll)
+})
+
+function onScroll() {
+  if (tabLoading.value || !hasMore.value) return
+  const scrollTop = document.documentElement.scrollTop || document.body.scrollTop
+  const scrollHeight = document.documentElement.scrollHeight
+  const clientHeight = document.documentElement.clientHeight
+  if (scrollTop + clientHeight >= scrollHeight - 300) {
+    loadMore()
+  }
+}
+
+async function loadTabData(reset = false) {
+  if (tabLoading.value) return
+  if (reset) {
+    page.value = 1
+    hasMore.value = true
+    tabPosts.value = []
+  }
   tabLoading.value = true
   try {
     let res
     if (activeTab.value === 'posts') {
-      res = await postsApi.getMyPosts({ page: 1 })
+      res = await postsApi.getMyPosts(page.value, PAGE_SIZE)
     } else if (activeTab.value === 'favs') {
-      res = await postsApi.getFavoritePosts(1)
+      res = await postsApi.getFavoritePosts(page.value, PAGE_SIZE)
     } else {
-      res = await postsApi.getHistoryPosts(1)
+      res = await postsApi.getHistoryPosts(page.value, PAGE_SIZE)
     }
-    tabPosts.value = res.data?.list || []
+    const newPosts = res.data?.list || []
+    if (reset) {
+      tabPosts.value = newPosts
+    } else {
+      tabPosts.value.push(...newPosts)
+    }
+    hasMore.value = newPosts.length >= PAGE_SIZE
   } catch (e) {
     console.error('加载失败', e)
   } finally {
     tabLoading.value = false
   }
+}
+
+function loadMore() {
+  if (tabLoading.value || !hasMore.value) return
+  page.value += 1
+  loadTabData()
+}
+
+function switchTab(tab) {
+  if (activeTab.value === tab) return
+  activeTab.value = tab
+  loadTabData(true)
 }
 
 function logout() {
@@ -171,7 +216,6 @@ function logout() {
   justify-content: center;
   color: white;
   font-size: 22px;
-  font-weight: 600;
   font-weight: 600;
   flex-shrink: 0;
 }

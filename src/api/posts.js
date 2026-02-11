@@ -31,15 +31,6 @@ export const postsApi = {
         return api.post('post/visit', formData)
     },
 
-    likeComment(floorId, isLike) {
-        const formData = new FormData()
-        formData.append('floor_id', String(floorId))
-        formData.append('op', isLike ? '0' : '1')
-        return api.post('floor/like', formData, {
-            headers: { 'Content-Type': undefined }
-        })
-    },
-
     likePost(postId, isLike) {
         const formData = new FormData()
         formData.append('post_id', String(postId))
@@ -54,15 +45,6 @@ export const postsApi = {
         formData.append('post_id', String(postId))
         formData.append('op', isDisliked ? '0' : '1')
         return api.post('post/dis', formData, {
-            headers: { 'Content-Type': undefined }
-        })
-    },
-
-    dislikeComment(floorId, isDisliked) {
-        const formData = new FormData()
-        formData.append('floor_id', String(floorId))
-        formData.append('op', isDisliked ? '0' : '1')
-        return api.post('floor/dis', formData, {
             headers: { 'Content-Type': undefined }
         })
     },
@@ -99,14 +81,6 @@ export const postsApi = {
         return api.get('post/delete', {
             params: {
                 post_id: id
-            }
-        })
-    },
-
-    deleteComment(floorId) {
-        return api.get('floor/delete', {
-            params: {
-                floor_id: floorId
             }
         })
     },

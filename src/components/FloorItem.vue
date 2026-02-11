@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="floor-item">
     <div class="floor-header">
       <div class="floor-author">
@@ -38,93 +38,166 @@
         <span class="icon">{{ floor.is_like ? 'thumb_up' : 'thumb_up_off_alt' }}</span>
         <span v-if="floor.like_count">{{ floor.like_count }}</span>
       </button>
-      <button class="action-btn" @click.stop="$emit('reply')">
+      <button class="action-btn" @click.stop="$emit('reply', floor)">
         <span class="icon">reply</span>
         回复
+      </button>
+      <button v-if="canDelete(floor)" class="action-btn" @click.stop="$emit('delete', floor)">
+        <span class="icon">delete</span>
+        删除
       </button>
     </div>
 
     <!-- Sub floors -->
-    <div v-if="floor.sub_floors?.length" class="sub-floors">
+    <div v-if="subReplyTotal > 0" class="sub-floors">
       <div
-        v-for="sub in floor.sub_floors.slice(0, showAllSub ? undefined : 3)"
+        v-for="sub in displaySubReplies"
         :key="sub.id"
         class="sub-floor"
       >
         <span class="sub-author">{{ sub.nickname || '匿名' }}</span>
         <span v-if="sub.reply_to_name" class="sub-reply"> 回复 {{ sub.reply_to_name }}</span>
-        <span class="sub-content">：{{ sub.content }}</span>
+        <span class="sub-content" v-html="renderContent(sub.content)"></span>
         <button class="sub-reply-btn" @click.stop="$emit('reply', sub)">回复</button>
+        <button
+          v-if="canDelete(sub)"
+          class="sub-reply-btn"
+          style="color:#E53935;"
+          @click.stop="$emit('delete', sub)"
+        >删除</button>
       </div>
       <button
-        v-if="floor.sub_floors.length > 3 && !showAllSub"
+        v-if="!showAllSub && canExpandSubReplies"
         class="sub-more"
-        @click.stop="showAllSub = true"
+        @click.stop="expandSubReplies"
       >
-        查看全部 {{ floor.sub_floor_cnt || floor.sub_floors.length }} 条回复
+        查看全部 {{ subReplyTotal }} 条回复
       </button>
+      <button
+        v-if="showAllSub && subReplyHasMore && !subReplyLoading"
+        class="sub-more"
+        @click.stop="loadSubReplies()"
+      >
+        加载更多回复
+      </button>
+      <div v-if="showAllSub && subReplyLoading" class="sub-loading">加载中...</div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { imageOriginUrl, avatarUrl, getAvatarColor } from '../utils/image'
+import { computed, ref, watch } from 'vue'
+import { floorsApi } from '../api/floors'
+import { imageOriginUrl } from '../utils/image'
+import { getAvatarStr as _getAvatarStr, getLetterAvatar, getAvatarColor, avatarUrl } from '../composables/useAvatar'
+import { formatRelativeTime as formatTime, renderContent } from '../composables/useFormat'
 
 const props = defineProps({
   floor: { type: Object, required: true },
   hideAvatar: { type: Boolean, default: false },
+  currentUserId: { type: [Number, String], default: null },
 })
-defineEmits(['reply', 'like', 'preview'])
+defineEmits(['reply', 'like', 'preview', 'delete'])
 
 const showAllSub = ref(false)
 const imgErr = ref(false)
+const subReplyList = ref([])
+const subReplyPage = ref(1)
+const subReplyHasMore = ref(false)
+const subReplyLoading = ref(false)
+const subReplyLoaded = ref(false)
+const SUB_REPLY_PAGE_SIZE = 10
 
+const subReplyTotal = computed(() => {
+  return Number(props.floor?.sub_floor_cnt || props.floor?.sub_floors?.length || 0)
+})
+
+const hasReliableSubReplyTotal = computed(() => Number(props.floor?.sub_floor_cnt || 0) > 0)
+const localSubReplyCount = computed(() => Number(props.floor?.sub_floors?.length || 0))
+const canExpandSubReplies = computed(() => {
+  if (subReplyTotal.value > 3 || subReplyTotal.value > localSubReplyCount.value) return true
+  return !hasReliableSubReplyTotal.value && localSubReplyCount.value >= 3
+})
+
+const displaySubReplies = computed(() => {
+  const localReplies = props.floor?.sub_floors || []
+  if (!showAllSub.value) return localReplies.slice(0, 3)
+  return subReplyLoaded.value ? subReplyList.value : localReplies
+})
+
+// Wrap composable to inject hideAvatar prop
 function getAvatarStr(floor) {
-  if (!floor) return ''
-  // For校务帖等需隐藏头像的场景，强制使用字母头像
-  if (props.hideAvatar) return ''
-  // Floor object usually has avatar at top level
-  if (floor.avatar && floor.avatar !== '') return floor.avatar
-  if (floor.user_info?.avatar) return floor.user_info.avatar
-  return ''
+  return _getAvatarStr(floor, { hideAvatar: props.hideAvatar })
 }
 
-function getLetterAvatar(nickname) {
-  const name = nickname || '匿'
-  const cleaned = name.replace(/[\d\*\s]/g, '').replace(/[^\u4e00-\u9fa5]/g, '')
-  return cleaned ? cleaned[0] : name[0]
+function resetSubReplyState() {
+  showAllSub.value = false
+  subReplyList.value = []
+  subReplyPage.value = 1
+  subReplyLoading.value = false
+  subReplyLoaded.value = false
+  const localCount = Number(props.floor?.sub_floors?.length || 0)
+  subReplyHasMore.value = hasReliableSubReplyTotal.value
+    ? localCount < subReplyTotal.value
+    : localCount >= SUB_REPLY_PAGE_SIZE
 }
 
-function formatTime(dateStr) {
-  if (!dateStr) return ''
-  const d = new Date(dateStr)
-  const now = new Date()
-  const diff = (now - d) / 1000
-  if (diff < 60) return '刚刚'
-  if (diff < 3600) return Math.floor(diff / 60) + '分钟前'
-  if (diff < 86400) return Math.floor(diff / 3600) + '小时前'
-  if (diff < 604800) return Math.floor(diff / 86400) + '天前'
-  return d.toLocaleDateString('zh-CN')
+watch(() => props.floor, resetSubReplyState, { immediate: true })
+
+function extractReplyList(res) {
+  const data = res?.data || {}
+  if (Array.isArray(data.list)) return data.list
+  if (Array.isArray(data.replys)) return data.replys
+  if (Array.isArray(data.data?.list)) return data.data.list
+  if (Array.isArray(data.data?.replys)) return data.data.replys
+  if (Array.isArray(data.data)) return data.data
+  if (Array.isArray(data)) return data
+  return []
 }
 
-const HTML_ESCAPE_MAP = {
-  '&': '&amp;',
-  '<': '&lt;',
-  '>': '&gt;',
-  '"': '&quot;',
-  "'": '&#39;',
-  '`': '&#96;',
+async function expandSubReplies() {
+  showAllSub.value = true
+  if (subReplyLoaded.value || subReplyLoading.value) return
+  await loadSubReplies(true)
 }
 
-function escapeHtml(text) {
-  return text.replace(/[&<>"'`]/g, (ch) => HTML_ESCAPE_MAP[ch] || ch)
+async function loadSubReplies(reset = false) {
+  if (subReplyLoading.value || !props.floor?.id) return
+  if (reset) {
+    subReplyPage.value = 1
+    subReplyList.value = []
+  }
+  subReplyLoading.value = true
+  try {
+    const res = await floorsApi.getFloorReplies(props.floor.id, subReplyPage.value)
+    const pageList = extractReplyList(res)
+    const merged = reset ? pageList : [...subReplyList.value, ...pageList]
+    const seen = new Set()
+    subReplyList.value = merged.filter((item) => {
+      const key = item?.id || `${item?.uid || ''}_${item?.created_at || ''}_${item?.content || ''}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    subReplyLoaded.value = true
+    const receivedFullPage = pageList.length >= SUB_REPLY_PAGE_SIZE
+    subReplyHasMore.value = hasReliableSubReplyTotal.value
+      ? receivedFullPage && subReplyList.value.length < subReplyTotal.value
+      : receivedFullPage
+    if (subReplyHasMore.value) subReplyPage.value += 1
+  } catch (e) {
+    console.warn('加载子回复失败', e)
+    subReplyLoaded.value = false
+  } finally {
+    subReplyLoading.value = false
+  }
 }
 
-function renderContent(text) {
-  if (!text) return ''
-  // Escape user text to prevent XSS, then restore line breaks
-  return escapeHtml(text).replace(/\n/g, '<br/>')
+function canDelete(item) {
+  if (!item) return false
+  const myId = Number(props.currentUserId || 0)
+  if (!myId) return false
+  return Number(item.uid || 0) === myId
 }
 </script>
 
@@ -155,7 +228,6 @@ function renderContent(text) {
   justify-content: center;
   color: white;
   font-size: 12px;
-  font-weight: 600;
   font-weight: 600;
   flex-shrink: 0;
 }
@@ -272,6 +344,11 @@ function renderContent(text) {
   cursor: pointer;
 }
 .sub-more:hover { text-decoration: underline; }
+.sub-loading {
+  margin-top: 6px;
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
 .sub-reply-btn {
   border: none;
   background: none;
@@ -282,3 +359,4 @@ function renderContent(text) {
 }
 .sub-reply-btn:hover { text-decoration: underline; }
 </style>
+

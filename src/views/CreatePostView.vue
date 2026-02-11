@@ -109,8 +109,8 @@ import { ref, computed, onMounted, inject } from 'vue'
 import { useRouter } from 'vue-router'
 import { useForumStore } from '../stores/forum'
 import { postsApi } from '../api/posts'
-import { userApi } from '../api/user'
 import { imageOriginUrl } from '../utils/image'
+import { useImageUpload } from '../composables/useImageUpload'
 
 const router = useRouter()
 const forumStore = useForumStore()
@@ -122,9 +122,16 @@ const title = ref('')
 const content = ref('')
 const tag = ref('')
 const submitting = ref(false)
-const uploading = ref(false)
-const images = ref([]) // uploaded image URLs
 const previewUrl = ref(null)
+
+// Image upload composable
+const {
+  images,
+  uploading,
+  onSelectFiles: onSelectImages,
+  onPasteFiles: onPasteImages,
+  removeImage,
+} = useImageUpload(toast)
 
 const canSubmit = computed(() => title.value.trim() && content.value.trim())
 
@@ -155,52 +162,7 @@ async function submitPost() {
   }
 }
 
-async function uploadPostImages(files) {
-  if (!files.length) return
-  uploading.value = true
-  try {
-    const res = await userApi.uploadImages(files)
-    const urls =
-      res.data?.urls ||
-      res.data?.list ||
-      res.data?.images ||
-      res.data?.data?.urls ||
-      res.data?.data?.list ||
-      res.data?.data?.images ||
-      []
-    if (!Array.isArray(urls) || urls.length === 0) {
-      throw new Error('未获取到图片地址')
-    }
-    images.value.push(...urls)
-    toast?.('图片上传成功', 'success')
-  } catch (e) {
-    toast?.(e.message || '图片上传失败', 'error')
-  } finally {
-    uploading.value = false
-  }
-}
-
-async function onSelectImages(event) {
-  const files = Array.from(event.target.files || [])
-  if (!files.length) return
-  await uploadPostImages(files)
-  event.target.value = ''
-}
-
-async function onPasteImages(e) {
-  const items = Array.from(e.clipboardData?.items || [])
-  const files = items
-    .filter(it => it.kind === 'file' && it.type.startsWith('image/'))
-    .map(it => it.getAsFile())
-    .filter(Boolean)
-  if (!files.length) return
-  e.preventDefault()
-  await uploadPostImages(files)
-}
-
-function removeImage(idx) {
-  images.value.splice(idx, 1)
-}
+// Image upload is now handled by the useImageUpload composable
 
 function previewImage(url) {
   previewUrl.value = url

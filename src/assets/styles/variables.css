@@ -74,6 +74,16 @@
   --header-height: 52px;
   --bottom-nav-height: 56px;
 
+  /* Accent colors */
+  --accent-primary: #6C5CE7;
+  --accent-gradient: linear-gradient(135deg, #6C5CE7, #a29bfe);
+
+  /* Glass effect */
+  --glass-border: rgba(0, 0, 0, 0.06);
+
+  /* Page layout (alias for header usage) */
+  --page-max-width: 960px;
+
   /* Transitions */
   --transition-fast: 0.15s ease;
   --transition-normal: 0.25s ease;

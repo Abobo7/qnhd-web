@@ -33,6 +33,11 @@ const routes = [
         component: () => import('../views/ProfileView.vue'),
         meta: { requiresAuth: true },
     },
+    {
+        path: '/:pathMatch(.*)*',
+        name: 'NotFound',
+        redirect: '/',
+    },
 ]
 
 const router = createRouter({

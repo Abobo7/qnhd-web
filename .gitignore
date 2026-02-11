@@ -14,8 +14,8 @@ dist/
 .DS_Store
 Thumbs.db
 
-# Environment
-.env
+# Environment (keep .env tracked — it only contains public API base URLs)
+# .env
 .env.local
 .env.*.local
 

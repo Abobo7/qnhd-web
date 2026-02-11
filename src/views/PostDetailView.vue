@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="detail-page page-container">
     <!-- Back button -->
     <button class="back-btn" @click="$router.back()">
@@ -48,6 +48,10 @@
         <button :class="['action-btn', { active: post.is_like }]" @click="toggleLike">
           <span class="icon">{{ post.is_like ? 'thumb_up' : 'thumb_up_off_alt' }}</span>
           <span>{{ post.like_count || '' }}</span>
+        </button>
+        <button :class="['action-btn', { active: post.is_dis }]" @click="toggleDislike">
+          <span class="icon">{{ post.is_dis ? 'thumb_down' : 'thumb_down_off_alt' }}</span>
+          <span>{{ post.dis_count || '' }}</span>
         </button>
         <button :class="['action-btn', { active: post.is_fav }]" @click="toggleFavorite">
           <span class="icon">{{ post.is_fav ? 'bookmark' : 'bookmark_border' }}</span>
@@ -135,16 +139,18 @@
           v-for="floor in floors"
           :key="floor.id"
           :floor="floor"
+          :current-user-id="currentUserId"
           :hide-avatar="isSchoolPost"
-          @reply="openReply(floor)"
+          @reply="openReply"
           @like="toggleFloorLike(floor)"
+          @delete="deleteFloor"
           @preview="previewImage"
         />
 
         <div v-if="loadingFloors" class="load-indicator"><div class="spinner"></div></div>
 
         <div v-if="!loadingFloors && hasMoreFloors" class="load-indicator" style="color:var(--text-tertiary);">
-          下拉自动加载更多...
+          下滑自动加载更多...
         </div>
 
         <div v-if="!loadingFloors && floors.length === 0" class="empty-state" style="padding:40px 0;">
@@ -219,8 +225,10 @@ import { ref, computed, onMounted, inject, nextTick, watch, onUnmounted } from '
 import { useRoute, useRouter } from 'vue-router'
 import { postsApi } from '../api/posts'
 import { floorsApi } from '../api/floors'
-import { userApi } from '../api/user'
-import { imageOriginUrl, avatarUrl, getAvatarColor } from '../utils/image'
+import { imageOriginUrl } from '../utils/image'
+import { getAvatarImageUrl, getLetterAvatar, getAvatarColor } from '../composables/useAvatar'
+import { formatDateTimeShort as formatTime, renderContent } from '../composables/useFormat'
+import { useImageUpload } from '../composables/useImageUpload'
 import FloorItem from '../components/FloorItem.vue'
 import { useAuthStore } from '../stores/auth'
 
@@ -243,13 +251,12 @@ const replyTo = ref(null)
 const sending = ref(false)
 const textareaRef = ref(null)
 const previewUrl = ref(null)
-const commentImages = ref([])
-const uploadingImages = ref(false)
 const deleting = ref(false)
 const commentScrollHandler = ref(null)
 const officialReplies = ref([])
 const loadingOfficial = ref(false)
 const isSchoolPost = computed(() => post.value?.type === 1)
+const currentUserId = computed(() => Number(authStore.userInfo?.id || authStore.userInfo?.uid || 0))
 
 const postId = computed(() => {
   const val = Number(route.params.id)
@@ -265,22 +272,20 @@ const canDelete = computed(() => {
 })
 const postAvatarError = ref(false)
 
-function getPostAvatar(p) {
-  if (!p || p.type === 1) return ''
-  const av = p.user_info?.avatar || p.avatar
-  if (!av || av === '') return ''
-  return avatarUrl(av)
-}
+// Image upload composable for comment images
+const {
+  images: commentImages,
+  uploading: uploadingImages,
+  onSelectFiles: onSelectCommentImages,
+  onPasteFiles: onPasteComment,
+  removeImage: removeCommentImage,
+  clearImages: clearCommentImages,
+} = useImageUpload(toast)
 
-function getPostAvatarColor(p) {
-  return getAvatarColor(p?.uid || 0)
-}
-
-function getPostLetterAvatar(p) {
-  const name = p?.nickname || '匿'
-  const cleaned = name.replace(/[\d\*\s]/g, '').replace(/[^\u4e00-\u9fa5]/g, '')
-  return cleaned ? cleaned[0] : name[0]
-}
+// Avatar helpers delegating to composables
+const getPostAvatar = (p) => getAvatarImageUrl(p)
+const getPostAvatarColor = (p) => getAvatarColor(p?.uid || 0)
+const getPostLetterAvatar = (p) => getLetterAvatar(p?.nickname, 'U')
 
 onMounted(async () => {
   if (!authStore.userInfo) {
@@ -405,7 +410,30 @@ async function toggleLike() {
   try {
     await postsApi.likePost(postId.value, post.value.is_like)
     post.value.is_like = !post.value.is_like
-    post.value.like_count += post.value.is_like ? 1 : -1
+    post.value.like_count = Number(post.value.like_count || 0) + (post.value.is_like ? 1 : -1)
+    if (post.value.is_like && post.value.is_dis) {
+      post.value.is_dis = false
+      if (post.value.dis_count !== undefined) {
+        post.value.dis_count = Math.max(Number(post.value.dis_count || 0) - 1, 0)
+      }
+    }
+  } catch (e) {
+    toast?.('操作失败', 'error')
+  }
+}
+
+async function toggleDislike() {
+  if (!post.value) return
+  try {
+    await postsApi.dislikePost(postId.value, post.value.is_dis)
+    post.value.is_dis = !post.value.is_dis
+    if (post.value.dis_count !== undefined) {
+      post.value.dis_count = Number(post.value.dis_count || 0) + (post.value.is_dis ? 1 : -1)
+    }
+    if (post.value.is_dis && post.value.is_like) {
+      post.value.is_like = false
+      post.value.like_count = Math.max(Number(post.value.like_count || 0) - 1, 0)
+    }
   } catch (e) {
     toast?.('操作失败', 'error')
   }
@@ -416,7 +444,7 @@ async function toggleFavorite() {
   try {
     await postsApi.favoritePost(postId.value, post.value.is_fav)
     post.value.is_fav = !post.value.is_fav
-    post.value.fav_count += post.value.is_fav ? 1 : -1
+    post.value.fav_count = Number(post.value.fav_count || 0) + (post.value.is_fav ? 1 : -1)
   } catch (e) {
     toast?.('操作失败', 'error')
   }
@@ -429,6 +457,22 @@ async function toggleFloorLike(floor) {
     floor.like_count += floor.is_like ? 1 : -1
   } catch (e) {
     toast?.('操作失败', 'error')
+  }
+}
+
+async function deleteFloor(floor) {
+  if (!floor?.id) return
+  const ok = window.confirm('确定要删除这条评论吗？')
+  if (!ok) return
+  try {
+    await floorsApi.deleteFloor(floor.id)
+    toast?.('删除成功', 'success')
+    await loadFloors(true)
+    if (post.value) {
+      post.value.comment_count = Math.max(Number(post.value.comment_count || 0) - 1, 0)
+    }
+  } catch (e) {
+    toast?.(e.message || '删除失败', 'error')
   }
 }
 
@@ -452,7 +496,7 @@ async function sendComment() {
     }
     commentText.value = ''
     replyTo.value = null
-    commentImages.value = []
+    clearCommentImages()
     toast?.('发送成功！', 'success')
     await loadFloors(true)
     if (post.value) post.value.comment_count = (post.value.comment_count || 0) + 1
@@ -463,52 +507,8 @@ async function sendComment() {
   }
 }
 
-async function uploadCommentFiles(files) {
-  if (!files.length) return
-  uploadingImages.value = true
-  try {
-    const res = await userApi.uploadImages(files)
-    const urls =
-      res.data?.urls ||
-      res.data?.list ||
-      res.data?.images ||
-      res.data?.data?.urls ||
-      res.data?.data?.list ||
-      res.data?.data?.images ||
-      []
-    if (!Array.isArray(urls) || urls.length === 0) {
-      throw new Error('未获取到图片地址')
-    }
-    commentImages.value.push(...urls)
-    toast?.('图片上传成功', 'success')
-  } catch (e) {
-    toast?.(e.message || '图片上传失败', 'error')
-  } finally {
-    uploadingImages.value = false
-  }
-}
-
-async function onSelectCommentImages(event) {
-  const files = Array.from(event.target.files || [])
-  if (!files.length) return
-  await uploadCommentFiles(files)
-  event.target.value = ''
-}
-
-async function onPasteComment(e) {
-  const items = Array.from(e.clipboardData?.items || [])
-  const files = items
-    .filter(it => it.kind === 'file' && it.type.startsWith('image/'))
-    .map(it => it.getAsFile())
-    .filter(Boolean)
-  if (!files.length) return
-  e.preventDefault()
-  await uploadCommentFiles(files)
-}
-
-function removeCommentImage(idx) {
-  commentImages.value.splice(idx, 1)
-}
+// uploadCommentFiles, onSelectCommentImages, onPasteComment, removeCommentImage
+// are now provided by the useImageUpload composable above
 
 async function deletePost() {
   if (!post.value || deleting.value) return
@@ -532,35 +532,7 @@ function autoResize(e) {
   el.style.height = Math.min(el.scrollHeight, 120) + 'px'
 }
 
-function formatTime(dateStr) {
-  if (!dateStr) return ''
-  const d = new Date(dateStr)
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  const h = String(d.getHours()).padStart(2, '0')
-  const min = String(d.getMinutes()).padStart(2, '0')
-  return `${y}-${m}-${day} ${h}:${min}`
-}
-
-const HTML_ESCAPE_MAP = {
-  '&': '&amp;',
-  '<': '&lt;',
-  '>': '&gt;',
-  '"': '&quot;',
-  "'": '&#39;',
-  '`': '&#96;',
-}
-
-function escapeHtml(text) {
-  return text.replace(/[&<>"'`]/g, (ch) => HTML_ESCAPE_MAP[ch] || ch)
-}
-
-function renderContent(text) {
-  if (!text) return ''
-  // Escape user text to prevent XSS, then restore line breaks
-  return escapeHtml(text).replace(/\n/g, '<br/>')
-}
+// formatTime and renderContent are now imported from composables/useFormat
 
 function previewImage(url) {
   previewUrl.value = url

@@ -8,7 +8,7 @@
 
     <!-- Bottom navigation (show when logged in) -->
     <nav v-if="showNav" class="bottom-nav">
-      <router-link to="/" class="nav-item" active-class="active" :class="{ active: $route.path === '/' }">
+      <router-link to="/" class="nav-item" exact-active-class="active">
         <span class="icon">home</span>
         <span class="nav-label">首页</span>
       </router-link>

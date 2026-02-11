@@ -68,8 +68,6 @@ export const floorsApi = {
     },
 
     deleteFloor(floorId) {
-        const formData = new FormData()
-        formData.append('floor_id', floorId)
-        return api.post('floor/delete', formData)
+        return api.get('floor/delete', { params: { floor_id: floorId } })
     },
 }

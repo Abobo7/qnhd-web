@@ -53,10 +53,6 @@
           <span class="icon">thumb_up_off_alt</span>
           {{ post.like_count || 0 }}
         </span>
-        <span class="stat">
-          <span class="icon">thumb_down_off_alt</span>
-          {{ post.dis_count || 0 }}
-        </span>
       </div>
       <span class="stat visit-stat">{{ post.visit_count || 0 }}次浏览</span>
     </div>
@@ -67,47 +63,20 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { imageThumbUrl, avatarUrl, getAvatarColor } from '../utils/image'
+import { ref, watch } from 'vue'
+import { imageThumbUrl } from '../utils/image'
+import { getAvatarStr, getLetterAvatar, getAvatarColor, avatarUrl } from '../composables/useAvatar'
+import { formatDateTime, truncateContent } from '../composables/useFormat'
 
-defineProps({ post: { type: Object, required: true } })
+const props = defineProps({ post: { type: Object, required: true } })
 defineEmits(['click'])
 
 const imgErr = ref(false)
 
-function getAvatarStr(post) {
-  if (!post || post.type === 1) return ''
-  const ui = post.user_info
-  if (ui && ui.avatar && ui.avatar !== '') return ui.avatar
-  if (post.avatar && post.avatar !== '') return post.avatar
-  return ''
-}
-
-function getLetterAvatar(nickname) {
-  const name = nickname || '匿'
-  const cleaned = name.replace(/[\d\*\s]/g, '').replace(/[^\u4e00-\u9fa5]/g, '')
-  return cleaned ? cleaned[0] : name[0]
-}
-
-function formatDateTime(dateStr) {
-  if (!dateStr) return ''
-  const d = new Date(dateStr)
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  const h = String(d.getHours()).padStart(2, '0')
-  const min = String(d.getMinutes()).padStart(2, '0')
-  const sec = String(d.getSeconds()).padStart(2, '0')
-  return `${y}-${m}-${day} ${h}:${min}:${sec}`
-}
-
-function truncateContent(text) {
-  if (!text) return ''
-  return text.length > 150 ? text.slice(0, 150) + '...' : text
-}
+// Reset avatar error when post changes (e.g. list recycling)
+watch(() => props.post, () => { imgErr.value = false })
 
 function isPinned(post) {
-  // Backend typically uses e_tag === 'top' or is_top flag
   if (!post) return false
   if (post.is_top) return true
   return post.e_tag === 'top' || post.eTag === 'top'
